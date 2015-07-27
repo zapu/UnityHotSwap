@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "unityhotswap", "unityhotswap\unityhotswap.csproj", "{FBFDECAA-F597-43BC-8571-AFF83C20B0AD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ildynarec", "ildynarec\ildynarec.csproj", "{9ED3926A-AEDC-41BD-99F0-2936D2A7695B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ildynarec_tests", "ildynarec_tests\ildynarec_tests.csproj", "{C2BB4F76-C140-4DF0-BC9B-1DACF229B0E4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FBFDECAA-F597-43BC-8571-AFF83C20B0AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FBFDECAA-F597-43BC-8571-AFF83C20B0AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FBFDECAA-F597-43BC-8571-AFF83C20B0AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FBFDECAA-F597-43BC-8571-AFF83C20B0AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9ED3926A-AEDC-41BD-99F0-2936D2A7695B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9ED3926A-AEDC-41BD-99F0-2936D2A7695B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9ED3926A-AEDC-41BD-99F0-2936D2A7695B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9ED3926A-AEDC-41BD-99F0-2936D2A7695B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2BB4F76-C140-4DF0-BC9B-1DACF229B0E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2BB4F76-C140-4DF0-BC9B-1DACF229B0E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2BB4F76-C140-4DF0-BC9B-1DACF229B0E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2BB4F76-C140-4DF0-BC9B-1DACF229B0E4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
