@@ -54,3 +54,14 @@ Sometimes assembly will not get instrumented. Errors "method is not hotpatchable
 Fork and clone this repository. I use Microsoft Visual Studio 2013 but whatever should be fine, this is not very huge codebase. Fixup dependencies to `UnityEngine.dll` and `UnityEditor.dll`. Have Visual Studio download nuget packages (nunit).
 
 If this project gets any traction I'll figure this out.
+
+## License
+
+GPLv2.
+
+Since you are not linking this library in your final product (but merely using it to develop the product), license of your product does not matter and you are not required to release source code. But any released changes to the library itself must include source code.
+
+## Contact
+
+I can be reached on twitter [@taluhunusa](https://twitter.com/taluhunusa) or by e-mail: michal at zapu.net
+
