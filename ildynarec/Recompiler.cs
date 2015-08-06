@@ -12,7 +12,7 @@ namespace ILDynaRec
 {
     public class Recompiler
     {
-        TypeResolver resolver;
+        TypeResolver resolver = new TypeResolver();
 
         const Reflection.BindingFlags bflags_all =
             Reflection.BindingFlags.NonPublic |
@@ -21,17 +21,22 @@ namespace ILDynaRec
             Reflection.BindingFlags.Public |
             Reflection.BindingFlags.FlattenHierarchy;
 
-        Dictionary<Type, Reflection.MethodInfo> EmitInstructionCache = new Dictionary<Type, Reflection.MethodInfo>();
-        Dictionary<Type, Reflection.MethodInfo> EmitPrimitiveCache = new Dictionary<Type, Reflection.MethodInfo>();
+        const Reflection.BindingFlags bflags_all_instance =
+            Reflection.BindingFlags.NonPublic |
+            Reflection.BindingFlags.Public |
+            Reflection.BindingFlags.Instance;
 
-        static Type[] primitiveOperandTypes = new Type[] {
+        private Dictionary<Type, Reflection.MethodInfo> EmitInstructionCache = new Dictionary<Type, Reflection.MethodInfo>();
+        private Dictionary<Type, Reflection.MethodInfo> EmitPrimitiveCache = new Dictionary<Type, Reflection.MethodInfo>();
+
+        private static Type[] primitiveOperandTypes = new Type[] {
             typeof(SByte), typeof(Int16), typeof(Int32), typeof(Single), typeof(Double),
             typeof(Byte), typeof(UInt16), typeof(UInt32), typeof(String)
         };
 
 
         public Recompiler() {
-            resolver = new TypeResolver();
+
         }
 
         public Type FindType(Cecil.TypeReference typeRef) {
@@ -88,6 +93,20 @@ namespace ILDynaRec
                     var operand = inst.Operand;
                     var operandType = operand.GetType();
 
+                    // Dynamic dispatch implementation:
+
+                    // We have to run different processing code depending on the type of instruction
+                    // operand. Visitor pattern cannot be implemented here, because we don't actually
+                    // own the classes that are the operands (and some of them are primitive or system
+                    // types). 
+
+                    // Therefore, dynamic dispatcher is used. Method for each operand type is implemented
+                    // in this class, and reflection is used to find correct method to call.
+
+                    // In newer .net versions we would be able to do EmitInstruction(il, ilop, (dynamic)operand),
+                    // but the .net version we are targeting (because of Unity compatibility) does not 
+                    // have `dynamic`.
+
                     if (operandType == typeof(Cecil.Cil.Instruction)) {
                         //branch location     
                         var operandInst = (Cecil.Cil.Instruction)operand;
@@ -112,7 +131,11 @@ namespace ILDynaRec
                         //or else, call our EmitInstruction
                         Reflection.MethodInfo method;
                         if (!EmitInstructionCache.TryGetValue(operandType, out method)) {
-                            method = GetType().GetMethod("EmitInstruction", new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
+                            method = GetType().GetMethod("EmitInstruction",
+                                bindingAttr: bflags_all_instance,
+                                binder: null,
+                                modifiers: null,
+                                types: new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
                             EmitInstructionCache[operandType] = method;
                         }
 
@@ -131,7 +154,7 @@ namespace ILDynaRec
             return dynMethod;
         }
 
-        public static OpCode FindOpcode(Cecil.Cil.OpCode cop) {
+        static OpCode FindOpcode(Cecil.Cil.OpCode cop) {
             var opType = typeof(OpCodes).GetFields().First((op) => {
                 return op.Name.ToLower().Replace('_', '.') == cop.Name;
             });
@@ -139,7 +162,7 @@ namespace ILDynaRec
             return (OpCode)opType.GetValue(null);
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.MethodReference operandMethod) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.MethodReference operandMethod) {
             var ourType = FindType(operandMethod.DeclaringType);
             Type[] opParamTypes = operandMethod.Parameters.Select((prm) => {
                 if (prm.ParameterType is Cecil.GenericParameter) {
@@ -168,17 +191,17 @@ namespace ILDynaRec
             }
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldDefinition operand) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldDefinition operand) {
             EmitInstruction(il, opcode, (Cecil.FieldReference)operand);
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldReference operandField) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldReference operandField) {
             var ourType = FindType(operandField.DeclaringType);
 
             il.Emit(opcode, ourType.GetField(operandField.Name, bindingAttr: bflags_all));
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.GenericInstanceMethod operandGeneric) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.GenericInstanceMethod operandGeneric) {
             var ourType = FindType(operandGeneric.DeclaringType);
 
             Type[] opGenericArgs = operandGeneric.GenericArguments.Select((prm) => {
@@ -208,11 +231,11 @@ namespace ILDynaRec
             il.Emit(opcode, ourMethod);
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.TypeReference operand) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.TypeReference operand) {
             il.Emit(opcode, FindType(operand));
         }
 
-        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.Cil.VariableDefinition operand) {
+        void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.Cil.VariableDefinition operand) {
             il.Emit(opcode, operand.Index);
         }
     }
