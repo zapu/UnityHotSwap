@@ -14,7 +14,7 @@ namespace ILDynaRec
     {
         TypeResolver resolver;
 
-        Reflection.BindingFlags bflags_all = 
+        const Reflection.BindingFlags bflags_all =
             Reflection.BindingFlags.NonPublic |
             Reflection.BindingFlags.Instance |
             Reflection.BindingFlags.Static |
@@ -102,14 +102,18 @@ namespace ILDynaRec
                             EmitPrimitiveCache[operandType] = method;
                         }
 
+                        if (method == null) {
+                            throw new Exception(String.Format("Emit method for primitive type {0} not found.", operandType.Name));
+                        }
+
                         method.Invoke(il, new object[] { ilop, operand });
                     }
                     else {
-                        //else, call our EmitInstruction
+                        //or else, call our EmitInstruction
                         Reflection.MethodInfo method;
-                        if (!EmitPrimitiveCache.TryGetValue(operandType, out method)) {
+                        if (!EmitInstructionCache.TryGetValue(operandType, out method)) {
                             method = GetType().GetMethod("EmitInstruction", new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
-                            EmitPrimitiveCache[operandType] = method;
+                            EmitInstructionCache[operandType] = method;
                         }
 
                         if (method == null) {
@@ -149,7 +153,8 @@ namespace ILDynaRec
             if (operandMethod.Name == ".ctor") {
                 il.Emit(opcode, ourType.GetConstructor(
                     Reflection.BindingFlags.Instance |
-                    Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */| Reflection.BindingFlags.Public,
+                    Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */|
+                    Reflection.BindingFlags.Public,
                     binder: null,
                     types: opParamTypes,
                     modifiers: null));
