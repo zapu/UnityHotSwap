@@ -14,6 +14,22 @@ namespace ILDynaRec
     {
         TypeResolver resolver;
 
+        Reflection.BindingFlags bflags_all = 
+            Reflection.BindingFlags.NonPublic |
+            Reflection.BindingFlags.Instance |
+            Reflection.BindingFlags.Static |
+            Reflection.BindingFlags.Public |
+            Reflection.BindingFlags.FlattenHierarchy;
+
+        Dictionary<Type, Reflection.MethodInfo> EmitInstructionCache = new Dictionary<Type, Reflection.MethodInfo>();
+        Dictionary<Type, Reflection.MethodInfo> EmitPrimitiveCache = new Dictionary<Type, Reflection.MethodInfo>();
+
+        static Type[] primitiveOperandTypes = new Type[] {
+            typeof(SByte), typeof(Int16), typeof(Int32), typeof(Single), typeof(Double),
+            typeof(Byte), typeof(UInt16), typeof(UInt32), typeof(String)
+        };
+
+
         public Recompiler() {
             resolver = new TypeResolver();
         }
@@ -68,124 +84,44 @@ namespace ILDynaRec
 
                 var ilop = FindOpcode(inst.OpCode);
 
-                var bflags_all = Reflection.BindingFlags.NonPublic |
-                                 Reflection.BindingFlags.Instance |
-                                 Reflection.BindingFlags.Static |
-                                 Reflection.BindingFlags.Public |
-                                 Reflection.BindingFlags.FlattenHierarchy;
-
                 if (inst.Operand != null) {
                     var operand = inst.Operand;
                     var operandType = operand.GetType();
+
                     if (operandType == typeof(Cecil.Cil.Instruction)) {
                         //branch location     
                         var operandInst = (Cecil.Cil.Instruction)operand;
 
                         il.Emit(ilop, labels[operandInst]);
                     }
-                    else if (operandType == typeof(sbyte)) {
-                        il.Emit(ilop, (sbyte)operand);
-                    }
-                    else if (operandType == typeof(Int16)) {
-                        il.Emit(ilop, (Int16)operand);
-                    }
-                    else if (operandType == typeof(Int32)) {
-                        il.Emit(ilop, (Int32)operand);
-                    }
-                    else if (operandType == typeof(Single)) {
-                        il.Emit(ilop, (Single)operand);
-                    }
-                    else if (operandType == typeof(Double)) {
-                        il.Emit(ilop, (Double)operand);
-                    }
-                    else if (operandType == typeof(Cecil.MethodReference) ||
-                        operandType == typeof(Cecil.MethodDefinition)) {
-                        var operandMethod = (Cecil.MethodReference)operand;
-                        var ourType = FindType(operandMethod.DeclaringType);
-                        Type[] opParamTypes = operandMethod.Parameters.Select((prm) => {
-                            if (prm.ParameterType is Cecil.GenericParameter) {
-                                throw new Exception("Unsupported generic parameter");
-                                //return ourType.GenericTypeArguments[((Cecil.GenericParameter)prm.ParameterType).Position];
-                            }
-
-                            return FindType(prm.ParameterType);
-                        }).ToArray();
-
-                        if (operandMethod.Name == ".ctor") {
-                            il.Emit(ilop, ourType.GetConstructor(
-                                Reflection.BindingFlags.Instance |
-                                Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */| Reflection.BindingFlags.Public,
-                                binder: null,
-                                types: opParamTypes,
-                                modifiers: null));
+                    else if (primitiveOperandTypes.Contains(operandType)) {
+                        //if operand is primitive, call il.Emit directly
+                        Reflection.MethodInfo method;
+                        if (!EmitPrimitiveCache.TryGetValue(operandType, out method)) {
+                            method = typeof(ILGenerator).GetMethod("Emit", new Type[] { typeof(OpCode), operandType });
+                            EmitPrimitiveCache[operandType] = method;
                         }
-                        else {
-                            il.Emit(ilop, ourType.GetMethod(operandMethod.Name,
-                                bindingAttr: bflags_all,
-                                binder: null,
-                                types: opParamTypes,
-                                modifiers: null));
-                        }
-                    }
-                    else if (operandType == typeof(Cecil.FieldDefinition) ||
-                        operandType == typeof(Cecil.FieldReference)) {
-                        var operandField = (Cecil.FieldReference)operand;
-                        var ourType = FindType(operandField.DeclaringType);
 
-                        il.Emit(ilop, ourType.GetField(operandField.Name, bindingAttr: bflags_all));
-                    }
-                    else if (operandType == typeof(Cecil.GenericInstanceMethod)) {
-                        var operandGeneric = (Cecil.GenericInstanceMethod)operand;
-                        var ourType = FindType(operandGeneric.DeclaringType);
-
-                        Type[] opGenericArgs = operandGeneric.GenericArguments.Select((prm) => {
-                            return FindType(prm);
-                        }).ToArray();
-
-                        Type[] opParamTypes = operandGeneric.Parameters.Select((prm) => {
-                            if (prm.ParameterType is Cecil.GenericParameter) {
-                                var genericParam = ((Cecil.GenericParameter)prm.ParameterType);
-                                return opGenericArgs[genericParam.Position];
-                            }
-
-                            return FindType(prm.ParameterType);
-                        }).ToArray();
-
-                        var methods = ourType.GetMethods(bindingAttr: bflags_all);
-
-                        var ourMethod = methods.First(met => {
-                            return met.Name == operandGeneric.Name &&
-                                met.GetGenericArguments().Length == opGenericArgs.Length &&
-                                met.GetParameters().Length == opParamTypes.Length;
-                        });
-
-                        var metParams = ourMethod.GetParameters();
-
-                        ourMethod = ourMethod.MakeGenericMethod(opGenericArgs);
-                        il.Emit(ilop, ourMethod);
-                    }
-                    else if (operandType == typeof(string)) {
-                        il.Emit(ilop, (string)operand);
-                    }
-                    else if (operandType == typeof(Cecil.TypeReference)) {
-                        il.Emit(ilop, FindType((Cecil.TypeReference)operand));
-                    }
-                    else if (operandType == typeof(Cecil.Cil.VariableDefinition)) {
-                        var vardef = (Cecil.Cil.VariableDefinition)operand;
-                        il.Emit(ilop, vardef.Index);
+                        method.Invoke(il, new object[] { ilop, operand });
                     }
                     else {
-                        Debug.Trace("Unexpected operand {0}", operandType);
-                        Debug.LogErrorFormat("Unexpected operand {0}", operandType);
-                        return null;
+                        //else, call our EmitInstruction
+                        Reflection.MethodInfo method;
+                        if (!EmitPrimitiveCache.TryGetValue(operandType, out method)) {
+                            method = GetType().GetMethod("EmitInstruction", new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
+                            EmitPrimitiveCache[operandType] = method;
+                        }
+
+                        if (method == null) {
+                            throw new Exception(String.Format("Don't know what to do with operand {0}", operandType.Name));
+                        }
+
+                        method.Invoke(this, new object[] { il, ilop, operand });
                     }
                 }
                 else {
                     il.Emit(ilop);
                 }
-
-                //Console.WriteLine("Emitted {0}", il.ILOffset);
-
             }
 
             return dynMethod;
@@ -197,6 +133,82 @@ namespace ILDynaRec
             });
 
             return (OpCode)opType.GetValue(null);
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.MethodReference operandMethod) {
+            var ourType = FindType(operandMethod.DeclaringType);
+            Type[] opParamTypes = operandMethod.Parameters.Select((prm) => {
+                if (prm.ParameterType is Cecil.GenericParameter) {
+                    throw new Exception("Unsupported generic parameter");
+                    //return ourType.GenericTypeArguments[((Cecil.GenericParameter)prm.ParameterType).Position];
+                }
+
+                return FindType(prm.ParameterType);
+            }).ToArray();
+
+            if (operandMethod.Name == ".ctor") {
+                il.Emit(opcode, ourType.GetConstructor(
+                    Reflection.BindingFlags.Instance |
+                    Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */| Reflection.BindingFlags.Public,
+                    binder: null,
+                    types: opParamTypes,
+                    modifiers: null));
+            }
+            else {
+                il.Emit(opcode, ourType.GetMethod(operandMethod.Name,
+                    bindingAttr: bflags_all,
+                    binder: null,
+                    types: opParamTypes,
+                    modifiers: null));
+            }
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldDefinition operand) {
+            EmitInstruction(il, opcode, (Cecil.FieldReference)operand);
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.FieldReference operandField) {
+            var ourType = FindType(operandField.DeclaringType);
+
+            il.Emit(opcode, ourType.GetField(operandField.Name, bindingAttr: bflags_all));
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.GenericInstanceMethod operandGeneric) {
+            var ourType = FindType(operandGeneric.DeclaringType);
+
+            Type[] opGenericArgs = operandGeneric.GenericArguments.Select((prm) => {
+                return FindType(prm);
+            }).ToArray();
+
+            Type[] opParamTypes = operandGeneric.Parameters.Select((prm) => {
+                if (prm.ParameterType is Cecil.GenericParameter) {
+                    var genericParam = ((Cecil.GenericParameter)prm.ParameterType);
+                    return opGenericArgs[genericParam.Position];
+                }
+
+                return FindType(prm.ParameterType);
+            }).ToArray();
+
+            var methods = ourType.GetMethods(bindingAttr: bflags_all);
+
+            var ourMethod = methods.First(met => {
+                return met.Name == operandGeneric.Name &&
+                    met.GetGenericArguments().Length == opGenericArgs.Length &&
+                    met.GetParameters().Length == opParamTypes.Length;
+            });
+
+            var metParams = ourMethod.GetParameters();
+
+            ourMethod = ourMethod.MakeGenericMethod(opGenericArgs);
+            il.Emit(opcode, ourMethod);
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.TypeReference operand) {
+            il.Emit(opcode, FindType(operand));
+        }
+
+        public void EmitInstruction(ILGenerator il, OpCode opcode, Cecil.Cil.VariableDefinition operand) {
+            il.Emit(opcode, operand.Index);
         }
     }
 }
