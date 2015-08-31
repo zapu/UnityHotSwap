@@ -25,7 +25,9 @@ namespace ILDynaRec
         }
 
         public void Start(string assemblyFilename) {
-            //Keep the "noninstrumented" version of assembly
+            // TODO: Current assembly is not (and probably should not be?) used
+            // later. Instead use methodHashes and methodBodies to see which
+            // methods should be replaced.
             currentAssembly = Cecil.AssemblyDefinition.ReadAssembly(assemblyFilename);
 
             bool instrumented = IsInstruemnted(currentAssembly);

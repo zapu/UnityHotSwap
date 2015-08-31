@@ -15,7 +15,7 @@ Only method bodies can be replaced. Types, fields, method cannot be added or rem
 
 It probably does what Visual Studio C++ *Edit and continue* is able to do. Maybe it will do more in the future. Or maybe Unity drops mono altogether and this will become obsolete.
 
-UnityHotSwap is currently in pre-alpha stage and will probably not work for non-toy projects. Small assemblies and simple replacements might work, though, so you are free to play around. Contributions are welcome.
+UnityHotSwap is currently in pre-alpha stage and will probably not work for non-toy projects. Small assemblies and simple replacements might work, though, so you are free to play around. But if it breaks, you get to keep all the shiny pieces. Contributions are welcome.
 
 ## How to install and use
 
