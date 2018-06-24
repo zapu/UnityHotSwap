@@ -105,7 +105,7 @@ namespace ILDynaRec
         }
 
         public void HotPatch(string assemblyFilename) {
-            Debug.LogFormat("Started hotpatching {0}", assemblyFilename);
+            Debug.Trace("Started hotpatching {0}", assemblyFilename);
 
             var newAssembly = Cecil.AssemblyDefinition.ReadAssembly(assemblyFilename);
 
@@ -133,6 +133,8 @@ namespace ILDynaRec
                     continue;
                 }
 
+                Debug.Trace("----------");
+
                 Debug.Trace("Hotswapping {0}", method.FullName);
                 Debug.Trace("Method body hashcode was: {0}, is: {1}", localMethod.BodyHashCode, newBodyHash);
 
@@ -156,7 +158,10 @@ namespace ILDynaRec
                     Debug.LogWarningFormat("Failed to patch {0}. <i>See full stacktrace in Temp/hotpatch.log.</i>\nError is: {1}",
                         method.FullName, e.Message);
                     Debug.Trace(e.StackTrace);
-                }   
+                }
+                finally {
+                    Debug.Trace("----------");
+                }
             }
         }
 
