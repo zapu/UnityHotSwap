@@ -42,12 +42,14 @@ namespace UnityHotSwap
         static void DisableDefaultRecompilation(PlayModeStateChange stateChange) {
             switch (stateChange) {
                 case PlayModeStateChange.EnteredPlayMode: {
+                        EditorPrefs.SetBool("kAutoRefresh", false);
                         EditorApplication.LockReloadAssemblies();
                         ILDynaRec.Debug.Log("<i>Assembly Reload locked as entering play mode</i>");
                         break;
                     }
                 case PlayModeStateChange.ExitingPlayMode: {
                         ILDynaRec.Debug.Log("<i>Assembly Reload unlocked as exiting play mode</i>");
+                        EditorPrefs.SetBool("kAutoRefresh", true);
                         EditorApplication.UnlockReloadAssemblies();
                         break;
                     }
