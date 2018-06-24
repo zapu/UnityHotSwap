@@ -28,9 +28,5 @@ namespace ILDynaRec
 
             return str;
         }
-
-        public static MethodDefinition GetMethodByName(this TypeDefinition type, string name) {
-            return type.Methods.FirstOrDefault(method => method.Name == name);
-        }
     }
 }

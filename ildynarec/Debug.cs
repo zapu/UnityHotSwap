@@ -34,6 +34,7 @@ namespace ILDynaRec
         }
 
         public static void Log(string str) {
+            Trace(str);
             LogAction(str);
         }
 

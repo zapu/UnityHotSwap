@@ -31,3 +31,4 @@ ipch/
 [Rr]elease*/
 Ankh.NoLoad
 packages/
+.vs/

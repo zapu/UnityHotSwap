@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 
+#if FALSE
 namespace UnityHotSwap
 {
     public class HotpatchSettingsWindow : EditorWindow
@@ -49,3 +50,4 @@ namespace UnityHotSwap
         }
     }
 }
+#endif

@@ -1,6 +1,6 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 
 using Cecil = Mono.Cecil;
 using Reflection = System.Reflection;
@@ -37,6 +37,20 @@ namespace ildynarec_tests
             this Cecil.AssemblyDefinition assembly, Type runtimeType) {
             var typename = runtimeType.FullName.Replace('+', '/');
             return assembly.IterateTypes().FirstOrDefault(type => type.FullName == typename);
+        }
+
+        private static Cecil.AssemblyDefinition s_currentAsm;
+        public static Cecil.AssemblyDefinition CurrentAssembly {
+            get {
+                if(s_currentAsm == null) {
+                    s_currentAsm = Cecil.AssemblyDefinition.ReadAssembly(Reflection.Assembly.GetExecutingAssembly().Location);
+                }
+                return s_currentAsm;
+            }
+        }
+
+        public static Cecil.MethodDefinition GetMethodByName(this Cecil.TypeDefinition type, string name) {
+            return type.Methods.FirstOrDefault(method => method.Name == name);
         }
     }
 }

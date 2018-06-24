@@ -3,7 +3,7 @@ using UnityEditor;
 using System.Collections;
 using System.IO;
 using System.Reflection.Emit;
-
+#if FALSE
 namespace UnityHotSwap
 {
     [InitializeOnLoad]
@@ -32,7 +32,7 @@ namespace UnityHotSwap
         }
 
         public static void Start() {
-            hotPatcher.Start(UnityCompiler.MainAssemblyFilename);
+            
         }
 
         private static bool ShouldLockReload {
@@ -81,3 +81,4 @@ namespace UnityHotSwap
         }
     }
 }
+#endif

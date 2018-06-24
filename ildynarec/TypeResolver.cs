@@ -32,6 +32,11 @@ namespace ILDynaRec
         /// Do the actual lookup for type
         /// </summary>
         private Type LookupType(Cecil.TypeReference typeDef) {
+            if(typeDef.IsByReference) {
+                var elemType = FindType(((Cecil.ByReferenceType)typeDef).ElementType);
+                return elemType.MakeByRefType();
+            }
+
             if (typeDef.IsGenericInstance) {
                 var genericTypeDef = (Cecil.GenericInstanceType)typeDef;
                 var ourArgs = genericTypeDef.GenericArguments.Select((arg) => {
@@ -42,12 +47,16 @@ namespace ILDynaRec
                 return ourBaseType.MakeGenericType(ourArgs);
             }
 
+            if(typeDef.IsGenericParameter) {
+                throw new Exception("Unsupported generic parameter");
+            }
+
             string assemblyName;
             try {
                 assemblyName = typeDef.AssemblyQualifiedName;
                 assemblyName = assemblyName.Substring(assemblyName.IndexOf(", ") + 2);
                 //map our donor assembly to original loaded assembly
-                assemblyName = assemblyName.Replace("Assembly-HotPatch-CSharp", "Assembly-CSharp");
+                assemblyName = assemblyName.Replace("--hotpatch", "");
             }
             catch (Mono.Cecil.AssemblyResolutionException e) {
                 //wtf. cecil bug?
@@ -69,7 +78,6 @@ namespace ILDynaRec
             }
 
             var typedefName = typeDef.FullName;
-
             if (typeDef.IsArray) {
                 typedefName = typedefName.Replace("[]", "");
             }

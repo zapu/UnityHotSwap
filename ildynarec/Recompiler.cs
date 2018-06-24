@@ -48,6 +48,40 @@ namespace ILDynaRec
             return type;
         }
 
+        public Reflection.MethodBase FindMethod(Type type, Cecil.MethodReference methodRef) {
+            Type[] opParamTypes = methodRef.Parameters.Select((prm) => {
+                if (prm.ParameterType is Cecil.GenericParameter) {
+                    throw new Exception("Unsupported generic parameter");
+                    //return ourType.GenericTypeArguments[((Cecil.GenericParameter)prm.ParameterType).Position];
+                }
+                if(prm.ParameterType is Cecil.ArrayType) {
+                    var arr = (Cecil.ArrayType)prm.ParameterType;
+                    if(arr.ElementType.IsGenericParameter) {
+                        throw new Exception("Unsupported generic array parameter");
+                    }
+                }
+
+                return FindType(prm.ParameterType);
+            }).ToArray();
+
+            if (methodRef.Name == ".ctor") {
+                return type.GetConstructor(
+                    Reflection.BindingFlags.Instance |
+                    Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */|
+                    Reflection.BindingFlags.Public,
+                    binder: null,
+                    types: opParamTypes,
+                    modifiers: null);
+            }
+            else {
+                return type.GetMethod(methodRef.Name,
+                    bindingAttr: bflags_all,
+                    binder: null,
+                    types: opParamTypes,
+                    modifiers: null);
+            }
+        }
+
         public DynamicMethod RecompileMethod(Cecil.MethodDefinition methodDef) {
             Debug.Trace("Recompiling method: {0}", methodDef.FullName);
 
@@ -89,65 +123,73 @@ namespace ILDynaRec
 
                 var ilop = FindOpcode(inst.OpCode);
 
-                if (inst.Operand != null) {
-                    var operand = inst.Operand;
-                    var operandType = operand.GetType();
+                if (inst.Operand == null) {
+                    // Simple operation without operand.
+                    il.Emit(ilop);
+                    continue;
+                }
 
-                    // Dynamic dispatch implementation:
+                var operand = inst.Operand;
+                var operandType = operand.GetType();
 
-                    // We have to run different processing code depending on the type of instruction
-                    // operand. Visitor pattern cannot be implemented here, because we don't actually
-                    // own the classes that are the operands (and some of them are primitive or system
-                    // types). 
+                // Dynamic dispatch implementation:
 
-                    // Therefore, dynamic dispatcher is used. Method for each operand type is implemented
-                    // in this class, and reflection is used to find correct method to call.
+                // We have to run different processing code depending on the type of instruction
+                // operand. Visitor pattern cannot be implemented here, because we don't actually
+                // own the classes that are the operands (and some of them are primitive or system
+                // types). 
 
-                    // In newer .net versions we would be able to do EmitInstruction(il, ilop, (dynamic)operand),
-                    // but the .net version we are targeting (because of Unity compatibility) does not 
-                    // have `dynamic`.
+                // Therefore, dynamic dispatcher is used. Method for each operand type is implemented
+                // in this class, and reflection is used to find correct method to call.
 
-                    if (operandType == typeof(Cecil.Cil.Instruction)) {
-                        //branch location     
-                        var operandInst = (Cecil.Cil.Instruction)operand;
+                // In newer .net versions we would be able to do EmitInstruction(il, ilop, (dynamic)operand),
+                // but the .net version we are targeting (because of Unity compatibility) does not 
+                // have `dynamic`.
 
-                        il.Emit(ilop, labels[operandInst]);
+                if (operandType == typeof(Cecil.Cil.Instruction)) {
+                    //branch location     
+                    var operandInst = (Cecil.Cil.Instruction)operand;
+
+                    il.Emit(ilop, labels[operandInst]);
+                }
+                else if (primitiveOperandTypes.Contains(operandType)) {
+                    //if operand is primitive, call il.Emit directly
+                    Reflection.MethodInfo method;
+                    if (!EmitPrimitiveCache.TryGetValue(operandType, out method)) {
+                        method = typeof(ILGenerator).GetMethod("Emit", new Type[] { typeof(OpCode), operandType });
+                        EmitPrimitiveCache[operandType] = method;
                     }
-                    else if (primitiveOperandTypes.Contains(operandType)) {
-                        //if operand is primitive, call il.Emit directly
-                        Reflection.MethodInfo method;
-                        if (!EmitPrimitiveCache.TryGetValue(operandType, out method)) {
-                            method = typeof(ILGenerator).GetMethod("Emit", new Type[] { typeof(OpCode), operandType });
-                            EmitPrimitiveCache[operandType] = method;
-                        }
 
-                        if (method == null) {
-                            throw new Exception(String.Format("Emit method for primitive type {0} not found.", operandType.Name));
-                        }
+                    if (method == null) {
+                        throw new Exception(String.Format("Emit method for primitive type {0} not found.", operandType.Name));
+                    }
 
+                    try {
                         method.Invoke(il, new object[] { ilop, operand });
-                    }
-                    else {
-                        //or else, call our EmitInstruction
-                        Reflection.MethodInfo method;
-                        if (!EmitInstructionCache.TryGetValue(operandType, out method)) {
-                            method = GetType().GetMethod("EmitInstruction",
-                                bindingAttr: bflags_all_instance,
-                                binder: null,
-                                modifiers: null,
-                                types: new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
-                            EmitInstructionCache[operandType] = method;
-                        }
-
-                        if (method == null) {
-                            throw new Exception(String.Format("Don't know what to do with operand {0}", operandType.Name));
-                        }
-
-                        method.Invoke(this, new object[] { il, ilop, operand });
+                    } catch (Reflection.TargetInvocationException e) {
+                        throw e.InnerException;
                     }
                 }
                 else {
-                    il.Emit(ilop);
+                    //or else, call our EmitInstruction
+                    Reflection.MethodInfo method;
+                    if (!EmitInstructionCache.TryGetValue(operandType, out method)) {
+                        method = GetType().GetMethod("EmitInstruction",
+                            bindingAttr: bflags_all_instance,
+                            binder: null,
+                            modifiers: null,
+                            types: new Type[] { typeof(ILGenerator), typeof(OpCode), operandType });
+                        EmitInstructionCache[operandType] = method;
+                    }
+
+                    if (method == null) {
+                        throw new Exception(String.Format("Don't know what to do with operand {0}", operandType.Name));
+                    }
+                    try {
+                        method.Invoke(this, new object[] { il, ilop, operand });
+                    } catch (Reflection.TargetInvocationException e) {
+                        throw e.InnerException;
+                    }
                 }
             }
 
@@ -155,9 +197,16 @@ namespace ILDynaRec
         }
 
         static OpCode FindOpcode(Cecil.Cil.OpCode cop) {
-            var opType = typeof(OpCodes).GetFields().First((op) => {
+            if (cop.Name == "constrained.") {
+                return OpCodes.Constrained;
+            }
+
+            var opType = typeof(OpCodes).GetFields().FirstOrDefault((op) => {
                 return op.Name.ToLower().Replace('_', '.') == cop.Name;
             });
+            if(opType == null) {
+                throw new Exception($"Unsupported opcode: {cop.Name}");
+            }
 
             return (OpCode)opType.GetValue(null);
         }
@@ -166,28 +215,35 @@ namespace ILDynaRec
             var ourType = FindType(operandMethod.DeclaringType);
             Type[] opParamTypes = operandMethod.Parameters.Select((prm) => {
                 if (prm.ParameterType is Cecil.GenericParameter) {
-                    throw new Exception("Unsupported generic parameter");
-                    //return ourType.GenericTypeArguments[((Cecil.GenericParameter)prm.ParameterType).Position];
+                    return ourType.GenericTypeArguments[((Cecil.GenericParameter)prm.ParameterType).Position];
                 }
 
                 return FindType(prm.ParameterType);
             }).ToArray();
 
             if (operandMethod.Name == ".ctor") {
-                il.Emit(opcode, ourType.GetConstructor(
+                var target = ourType.GetConstructor(
                     Reflection.BindingFlags.Instance |
                     Reflection.BindingFlags.Static /*| Reflection.BindingFlags.NonPublic */|
                     Reflection.BindingFlags.Public,
                     binder: null,
                     types: opParamTypes,
-                    modifiers: null));
+                    modifiers: null);
+                if(target == null) {
+                    throw new Exception($"Cannot find call target constructor: {operandMethod.Name} {opParamTypes}");
+                }
+                il.Emit(opcode, target);
             }
             else {
-                il.Emit(opcode, ourType.GetMethod(operandMethod.Name,
+                var target = ourType.GetMethod(operandMethod.Name,
                     bindingAttr: bflags_all,
                     binder: null,
                     types: opParamTypes,
-                    modifiers: null));
+                    modifiers: null);
+                if (target == null) {
+                    throw new Exception($"Cannot find call target method: {operandMethod.Name} {opParamTypes}");
+                }
+                il.Emit(opcode, target);
             }
         }
 
@@ -219,11 +275,14 @@ namespace ILDynaRec
 
             var methods = ourType.GetMethods(bindingAttr: bflags_all);
 
-            var ourMethod = methods.First(met => {
+            var ourMethod = methods.FirstOrDefault(met => {
                 return met.Name == operandGeneric.Name &&
                     met.GetGenericArguments().Length == opGenericArgs.Length &&
                     met.GetParameters().Length == opParamTypes.Length;
             });
+            if(ourMethod == null) {
+                throw new Exception($"Could not find generic call target for {operandGeneric}");
+            }
 
             var metParams = ourMethod.GetParameters();
 
