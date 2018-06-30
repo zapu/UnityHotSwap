@@ -43,22 +43,19 @@ namespace UnityHotSwap
             var asmPath = $"-out:Temp/{assembly}";
             foreach (var fileInfo in fileInfos) {
                 try {
-                    string modifiedOutput = null;
                     var text = File.ReadAllText(fileInfo.FullName);
-                    if (text.Contains(asmPath)) {
-                        modifiedOutput = text.Replace(asmPath, "-out:" + outFilename);
+                    if (!text.Contains(asmPath)) {
+                        continue;
                     }
 
-                    if (modifiedOutput != null) {
-                        // Found param file for current assembly, grab source file names while at it.
-                        foreach (var line in text.Split('\n')) {
-                            if (sourceFilePattern.IsMatch(line)) {
-                                m_sourceFiles.Add(line.Trim());
-                            }
+                    // Found param file for current assembly, grab source file names while at it.
+                    foreach (var line in text.Split('\n')) {
+                        if (sourceFilePattern.IsMatch(line)) {
+                            m_sourceFiles.Add(line.Trim());
                         }
-
-                        return modifiedOutput;
                     }
+
+                    return text.Replace(asmPath, "-out:" + outFilename);
                 }
                 catch { }
             }
@@ -81,7 +78,8 @@ namespace UnityHotSwap
                     if (fileTime > asmTime) {
                         Trace($"Found changed source: {fileName} in {assemblyName}");
                         return true;
-                    } else {
+                    }
+                    else {
                         return false;
                     }
                 });
