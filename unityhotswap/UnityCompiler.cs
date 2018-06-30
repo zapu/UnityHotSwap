@@ -1,14 +1,19 @@
 using System;
+using System.Linq;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
+using System.Collections.Generic;
+
 using UnityEngine;
 
 namespace UnityHotSwap
 {
     internal class UnityCompiler
     {
-        public UnityCompiler() {
-        }
+        public UnityCompiler() { }
+
+        public DateTime? assemblyModifiedTime = null;
 
         public static string TempPath {
             get {
@@ -26,22 +31,36 @@ namespace UnityHotSwap
             ILDynaRec.Debug.Trace(str);
         }
 
+        List<string> m_sourceFiles = new List<string>();
+
         private string GetMonoCompileParams(string assembly, string outFilename) {
             var dir = new DirectoryInfo(TempPath);
             var fileInfos = dir.GetFileSystemInfos("UnityTempFile-*");
 
             Array.Sort(fileInfos, (a, b) => b.CreationTime.CompareTo(a.CreationTime));
 
+            var sourceFilePattern = new Regex(@"^Assets/[a-zA-Z\\/]+\.cs\s?$");
             var asmPath = $"-out:Temp/{assembly}";
             foreach (var fileInfo in fileInfos) {
                 try {
+                    string modifiedOutput = null;
                     var text = File.ReadAllText(fileInfo.FullName);
                     if (text.Contains(asmPath)) {
-                        return text.Replace(asmPath, "-out:" + outFilename);
+                        modifiedOutput = text.Replace(asmPath, "-out:" + outFilename);
+                    }
+
+                    if (modifiedOutput != null) {
+                        // Found param file for current assembly, grab source file names while at it.
+                        foreach (var line in text.Split('\n')) {
+                            if (sourceFilePattern.IsMatch(line)) {
+                                m_sourceFiles.Add(line.Trim());
+                            }
+                        }
+
+                        return modifiedOutput;
                     }
                 }
-                catch {
-                }
+                catch { }
             }
 
             return null;
@@ -53,6 +72,23 @@ namespace UnityHotSwap
                 ILDynaRec.Debug.Log($"No compile params for {assemblyName}. " +
                     "It's likely that assembly has yet to be compiled during current session");
                 return false;
+            }
+
+            if (assemblyModifiedTime != null) {
+                var asmTime = assemblyModifiedTime.Value;
+                bool anyChanges = m_sourceFiles.Any((fileName) => {
+                    var fileTime = File.GetLastWriteTime(fileName);
+                    if (fileTime > asmTime) {
+                        Trace($"Found changed source: {fileName} in {assemblyName}");
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+                if (!anyChanges) {
+                    Trace($"Ignoring {assemblyName} - no changes in source files");
+                    return false;
+                }
             }
 
             var file = File.CreateText(TempPath + "HotPatchTemp");

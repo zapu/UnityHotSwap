@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
@@ -20,8 +21,7 @@ namespace UnityHotSwap
 
             var logFilename = UnityCompiler.TempPath + "/hotswap.log";
 
-            //File.Delete(logFilename);
-
+            // Truncate log file.
             File.WriteAllText(logFilename, "");
             System.Diagnostics.Trace.Listeners.Clear();
             System.Diagnostics.Trace.Listeners.Add(
@@ -31,6 +31,7 @@ namespace UnityHotSwap
 
         static ILDynaRec.HotPatcher patcher;
         private static List<string> loadedAssemblies = new List<string>();
+        private static Dictionary<string, DateTime> assemblyTimestamps = new Dictionary<string, DateTime>();
 
         static void OnPlayModeStateChanged(PlayModeStateChange stateChange) {
             if (stateChange == PlayModeStateChange.ExitingPlayMode) {
@@ -76,6 +77,7 @@ namespace UnityHotSwap
                 }
                 patcher.LoadLocalAssembly(fileInfo.FullName);
                 loadedAssemblies.Add(fileInfo.Name);
+                assemblyTimestamps[fileInfo.Name] = fileInfo.LastWriteTime;
                 UnityCompiler.Trace($"Read {fileInfo.Name} ({fileInfo.FullName})");
             }
         }
@@ -102,15 +104,18 @@ namespace UnityHotSwap
                         throw new UnityException("Hotpatch cancelled");
                     }
 
-                    var compiler = new UnityCompiler();
+                    var compiler = new UnityCompiler {
+                        assemblyModifiedTime = assemblyTimestamps[assembly],
+                    };
                     var outputName = Path.GetFileNameWithoutExtension(assembly) + "--hotpatch.dll";
                     if (!compiler.InvokeCompiler(assembly, outputName)) {
-                        UnityCompiler.Trace($"Failed to compile {assembly}.");
+                        UnityCompiler.Trace($"Did not compile compile {assembly}.");
                         continue;
                     }
 
                     UnityCompiler.Trace($"Compiled assembly {assembly} as {compiler.OutputAssemblyPath}, running hot patcher.");
                     patcher.HotPatch(compiler.OutputAssemblyPath);
+                    assemblyTimestamps[assembly] = DateTime.Now;
                 }
             }
             finally {
